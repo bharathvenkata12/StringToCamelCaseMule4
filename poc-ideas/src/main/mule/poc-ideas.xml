@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="37f8e5de-d6c0-4cb1-86ce-7feffe54b33b" >
+		<http:listener-connection host="localhost" port="9085" />
+	</http:listener-config>
+	<flow name="poc-ideasFlow" doc:id="7e4589d1-208b-49a5-b24e-d5754cbd4ffd" >
+		<http:listener doc:name="Listener" doc:id="9dbe58cc-c160-4acb-8ec7-becfe74103b6" config-ref="HTTP_Listener_config" path="/camelcase"/>
+				<set-variable value="${mule.home}\apps\\${app.name}\dictionary\words.txt" doc:name="Set dictionary path" doc:id="6c88b3fc-b566-41c4-9d5e-f64c473f25f1" variableName="filepath" />
+		
+		<scripting:execute engine="python" doc:name="Execute Viterbi Algorithm" doc:id="c56a558b-b959-423f-ba68-a058388b55cc" >
+			<scripting:code ><![CDATA[import re
+import json
+#import wordninja
+from collections import Counter
+
+def viterbi_segment(text):
+    probs, lasts = [1.0], [0]
+    for i in range(1, len(text) + 1):
+        prob_k, k = max((probs[j] * word_prob(text[j:i]), j)
+                        for j in range(max(0, i - max_word_length), i))
+        probs.append(prob_k)
+        lasts.append(k)
+    words = []
+    i = len(text)
+    while 0 < i:
+        words.append(text[lasts[i]:i])
+        i = lasts[i]
+    words.reverse()
+    return words, probs[-1]
+
+def word_prob(word): return dictionary[word] / total
+def words(text): return re.findall('[a-z]+', text.lower()) 
+dictionary = Counter(words(open(filepath).read()))
+max_word_length = max(map(len, dictionary))
+total = float(sum(dictionary.values()))
+
+
+def camelCase(st):
+    output = ''.join(x for x in st.title() if x.isalnum())
+    return output[0].lower() + output[1:]
+
+def main(incomingArray):
+    arr=[]
+    for x in incomingArray:
+        vResponse=viterbi_segment(x.replace("__c","").replace("_",""))[0]
+        str=" ".join(vResponse)
+        str = camelCase(str)
+        arr.append(str)
+    return arr
+
+    
+result=main(incomingArray)
+]]></scripting:code>
+			<scripting:parameters ><![CDATA[#[{
+	incomingArray : payload,
+	filepath: vars.filepath
+	}]]]></scripting:parameters>
+		</scripting:execute>
+		<ee:transform doc:name="Transform Message" doc:id="234ab4a9-cb7b-4d5d-a6ae-0617b8a0fb1c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
